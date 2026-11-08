@@ -1,0 +1,109 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Administrador — DG. Kevin Cura</title>
+<style>
+:root{--bg:#FBFBFC;--l1:#D9DDE1;--l2:#B4BAC0;--mid:#6B737B;--k:#22272D;--e:cubic-bezier(.22,.8,.2,1)}
+*{box-sizing:border-box;margin:0}body{font:16px/1.4 "Helvetica Neue",Arial,sans-serif;background:var(--bg);color:var(--k)}
+header{background:var(--k);color:var(--bg);display:flex;align-items:center;justify-content:space-between;padding:14px 24px;gap:12px;flex-wrap:wrap}
+header b{font-weight:500}header nav{display:flex;gap:6px;flex-wrap:wrap}
+main,.box{max-width:900px;margin:0 auto;padding:28px 20px 80px}.box{max-width:380px;padding-top:12vh}
+h1,h2{font-weight:600;letter-spacing:-.03em}h1{font-size:2.4rem}h2{font-size:1.6rem}h3{margin:30px 0 12px;font-weight:600}
+.m,.row span,legend{color:var(--mid);font-size:.8rem}
+.b{display:inline-flex;align-items:center;justify-content:center;border:1.5px solid var(--k);background:var(--bg);color:var(--k);border-radius:999px;padding:.55em 1.1em;font:500 .75rem Arial,sans-serif;letter-spacing:.08em;cursor:pointer;text-decoration:none;transition:background .3s,color .3s}
+.b:hover{background:var(--k);color:var(--bg)}.b.k{background:var(--k);color:var(--bg)}.b.k:hover{background:var(--bg);color:var(--k)}.b[disabled]{opacity:.3;pointer-events:none}
+header .b{background:transparent;color:var(--bg);border-color:var(--bg)}header .b:hover,header .b.on{background:var(--bg);color:var(--k)}
+label{display:block;margin:14px 0 0;font-size:.8rem;color:var(--mid)}input,textarea{display:block;width:100%;margin-top:5px;padding:11px 12px;border:1px solid var(--l2);background:#fff;font:inherit;color:var(--k);border-radius:6px}
+input[type=checkbox]{display:inline;width:auto;margin:0 8px 0 0}.ck{display:inline-block;margin:10px 16px 0 0;color:var(--k);font-size:.95rem}
+fieldset{border:1px solid var(--l1);border-radius:6px;padding:8px 14px 14px;margin-top:16px}form .b{margin-top:20px}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:12px}
+.row{display:flex;align-items:center;gap:14px;padding:12px 0;border-top:1px solid var(--l1);flex-wrap:wrap}.row .g{flex:1;min-width:140px}.row .g b{display:block}
+.row input.nm{flex:1;margin:0;min-width:140px}.ac{display:flex;gap:6px;flex-wrap:wrap}.th{width:64px;height:64px;object-fit:cover;background:var(--l1);border-radius:4px}
+.inl{display:flex;gap:10px;align-items:center;margin-bottom:12px}.inl .b{margin:0;white-space:nowrap}.inl input{margin:0}
+.mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}.mc{border:1px solid var(--l1);border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:8px}
+.mc img,.mc video,.mc .em{width:100%;aspect-ratio:1;object-fit:cover;background:var(--l1);border-radius:4px;display:grid;place-items:center;font-size:.7rem;color:var(--mid)}.mc .b{margin:0;padding:.4em .7em}
+.up{display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;align-items:center}.up form{display:flex;gap:8px;flex:1;min-width:240px}.up form .b{margin:0;white-space:nowrap}.up input{margin:0}
+.err{color:#b3261e;font-size:.85rem;margin-top:12px}.pv{width:140px;aspect-ratio:3/4;object-fit:cover;background:var(--l1);margin-top:8px;display:block}
+#toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,30px);background:var(--k);color:var(--bg);padding:12px 20px;border-radius:999px;opacity:0;pointer-events:none;transition:all .4s var(--e);max-width:90vw;font-size:.9rem;z-index:9}
+#toast.on{opacity:1;transform:translate(-50%,0)}#toast.bad{background:#b3261e}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/config.js"></script></head><body><div id="app"></div><div id="toast" role="status"></div>
+<script>
+const C=window.PORTFOLIO_CONFIG||{},$=s=>document.querySelector(s),app=$("#app");
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+if(!C.SUPABASE_URL||!C.SUPABASE_ANON_KEY){app.innerHTML='<div class="box"><h1>Falta conectar</h1><p class="m">Todavía no se cargaron los datos de conexión con Supabase.</p></div>';throw new Error("sin config")}
+const sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY),BK=sb.storage.from("portfolio");
+const pub=p=>`${C.SUPABASE_URL}/storage/v1/object/public/portfolio/${p}`;
+let cats=[],projs=[],prof={},tab="p",main,tt;
+const toast=(m,bad)=>{const t=$("#toast");t.textContent=m;t.className=bad?"bad on":"on";clearTimeout(tt);tt=setTimeout(()=>t.className="",4500)};
+const fail=x=>{console.error(x);toast("Error: "+(x.message||x),1)};
+async function boot(){const{data:{session}}=await sb.auth.getSession();if(!session)return login();
+const{data:a}=await sb.from("admins").select("user_id").maybeSingle();if(!a){await sb.auth.signOut();return login("Esta cuenta no tiene permiso de administrador.")}
+await loadAll();shell()}
+function login(msg){app.innerHTML=`<div class="box"><h1>Administrador</h1><p class="m">DG. Kevin Cura</p><form id="lf"><label>Correo<input type="email" name="e" required autocomplete="username"></label><label>Contraseña<input type="password" name="p" required autocomplete="current-password"></label><button class="b k">ENTRAR</button><p class="err">${esc(msg||"")}</p></form></div>`;
+$("#lf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),{error}=await sb.auth.signInWithPassword({email:f.get("e"),password:f.get("p")});if(error)return $(".err").textContent="Correo o contraseña incorrectos.";boot()}}
+async function loadAll(){const[c,p,f]=await Promise.all([sb.from("categories").select("*").order("position"),sb.from("projects").select("*,project_media(*),project_categories(category_id)").order("position"),sb.from("profile").select("*").eq("id",1).single()]);
+[c,p,f].forEach(r=>r.error&&fail(r.error));cats=c.data||[];projs=p.data||[];prof=f.data||{}}
+function shell(){app.innerHTML=`<header><b>Administrador · DG. Kevin Cura</b><nav><button class="b" data-t="p">PROYECTOS</button><button class="b" data-t="c">CATEGORÍAS</button><button class="b" data-t="f">PERFIL</button><a class="b" href="/" target="_blank">VER WEB</a><button class="b" id="out">SALIR</button></nav></header><main id="mn"></main>`;
+main=$("#mn");$("#out").onclick=async()=>{await sb.auth.signOut();login()};
+app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;view()});main.onclick=act;view()}
+function view(){app.querySelectorAll("[data-t]").forEach(b=>b.classList.toggle("on",b.dataset.t==tab));({p:vProj,c:vCat,f:vProf})[tab]()}
+const reload=async v=>{await loadAll();v()};
+async function reorder(arr,i,d,table,v){const j=i+d;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];
+const rs=await Promise.all(arr.map((x,k)=>sb.from(table).update({position:k}).eq("id",x.id)));const e=rs.find(r=>r.error);if(e)fail(e.error);await reload(v)}
+/* PROYECTOS */
+function vProj(){main.innerHTML=`<div class="bar"><h2>Proyectos</h2><button class="b k" data-a="newp">+ NUEVO PROYECTO</button></div>`+(projs.length?projs.map((p,i)=>`<div class="row"><img class="th" alt="" ${p.cover_path?`src="${esc(pub(p.cover_path))}"`:""}><div class="g"><b>${esc(p.title)}</b><span>${p.published?"Publicado":"Oculto"}${p.cover_path?"":" · sin portada"}</span></div><div class="ac"><button class="b" data-a="pup" data-i="${i}" aria-label="Subir" ${i?"":"disabled"}>↑</button><button class="b" data-a="pdn" data-i="${i}" aria-label="Bajar" ${i<projs.length-1?"":"disabled"}>↓</button><button class="b" data-a="ptog" data-id="${p.id}">${p.published?"OCULTAR":"PUBLICAR"}</button><button class="b" data-a="edit" data-id="${p.id}">EDITAR</button><button class="b" data-a="delp" data-id="${p.id}">ELIMINAR</button></div></div>`).join(""):'<p class="m">Todavía no hay proyectos. Tocá "Nuevo proyecto".</p>')}
+function edit(id){tab="p";const p=projs.find(x=>x.id==id);if(!p)return vProj();const sel=new Set(p.project_categories.map(x=>x.category_id)),md=[...p.project_media].sort((a,b)=>a.position-b.position);
+main.innerHTML=`<div class="bar"><h2>Editar proyecto</h2><button class="b" data-a="back">← VOLVER</button></div>
+<form id="pf"><label>Nombre<input name="title" value="${esc(p.title)}" required></label><label>Tipo de trabajo<input name="work_type" value="${esc(p.work_type)}" placeholder="Identidad visual, campaña, diseño editorial…"></label><label>Mi rol<input name="role" value="${esc(p.role)}" placeholder="Dirección de arte, diseño gráfico…"></label><label>Año<input name="year" type="number" value="${p.year??""}"></label><label>Qué se hizo (1 a 3 líneas)<textarea name="description" rows="3">${esc(p.description)}</textarea></label>
+<fieldset><legend>Categorías</legend>${cats.map(c=>`<label class="ck"><input type="checkbox" name="cat" value="${c.id}" ${sel.has(c.id)?"checked":""}>${esc(c.name)}</label>`).join("")||'<span class="m">Creá categorías primero.</span>'}</fieldset>
+<label class="ck"><input type="checkbox" name="published" ${p.published?"checked":""}>Publicado (visible en la web)</label><br><button class="b k">GUARDAR</button></form>
+<h3>Imágenes y videos</h3><p class="m" style="margin-bottom:12px">Elegí una imagen como PORTADA (obligatoria para publicar). Los videos de hasta 50 MB se suben acá; los más pesados, como enlace de YouTube o Vimeo.</p>
+<div class="mg">${md.map(m=>`<div class="mc">${m.kind=="image"?`<img src="${esc(pub(m.path))}" alt="">`:m.kind=="video"?`<video src="${esc(pub(m.path))}#t=0.1" preload="metadata" muted></video>`:'<div class="em">ENLACE</div>'}${m.kind=="image"?`<button class="b ${p.cover_path==m.path?"k":""}" data-a="cover" data-m="${m.id}">${p.cover_path==m.path?"✓ PORTADA":"USAR DE PORTADA"}</button>`:""}<button class="b" data-a="delm" data-m="${m.id}">QUITAR</button></div>`).join("")}</div>
+<div class="up"><label class="b">+ SUBIR ARCHIVOS<input type="file" id="fi" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" hidden></label><form id="vf"><input name="u" placeholder="Enlace de YouTube o Vimeo" required><button class="b">AGREGAR ENLACE</button></form></div>`;
+$("#pf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),pubd=f.get("published")=="on";if(pubd&&!p.cover_path)return toast("Antes de publicar, subí una imagen y elegila como portada.",1);
+const r=await sb.from("projects").update({title:(f.get("title")||"").trim()||"Sin título",work_type:f.get("work_type"),role:f.get("role"),year:f.get("year")?+f.get("year"):null,description:f.get("description"),published:pubd,updated_at:new Date().toISOString()}).eq("id",id);if(r.error)return fail(r.error);
+await sb.from("project_categories").delete().eq("project_id",id);const ids=f.getAll("cat");if(ids.length){const r2=await sb.from("project_categories").insert(ids.map(c=>({project_id:id,category_id:c})));if(r2.error)return fail(r2.error)}
+toast("Guardado ✓");await loadAll();edit(id)};
+$("#fi").onchange=async e=>{toast("Subiendo… no cierres la página");for(const f of e.target.files)await upload(p,f);await loadAll();edit(id)};
+$("#vf").onsubmit=async e=>{e.preventDefault();const u=new FormData(e.target).get("u").trim();if(!/^https:\/\/(www\.)?(youtube\.com|youtu\.be|vimeo\.com)\//.test(u))return toast("Pegá un enlace de YouTube o Vimeo (empieza con https://).",1);
+const r=await sb.from("project_media").insert({project_id:id,kind:"embed",url:u,position:nextPos(p)});if(r.error)return fail(r.error);await loadAll();edit(id)}}
+const nextPos=p=>(p.project_media.length?Math.max(...p.project_media.map(m=>m.position)):0)+1;
+async function shrink(f){const b=await createImageBitmap(f),k=Math.min(1,2400/Math.max(b.width,b.height)),w=Math.round(b.width*k),h=Math.round(b.height*k),c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(b,0,0,w,h);return{blob:await new Promise(r=>c.toBlob(r,"image/webp",.88)),ratio:+(w/h).toFixed(4)}}
+const vratio=f=>new Promise(r=>{const v=document.createElement("video");v.preload="metadata";v.onloadedmetadata=()=>{r(v.videoWidth/v.videoHeight||1.78);URL.revokeObjectURL(v.src)};v.onerror=()=>r(1.78);v.src=URL.createObjectURL(f)});
+async function upload(p,file){try{let blob=file,ratio=1,ext=(file.name.split(".").pop()||"bin").toLowerCase().replace(/[^a-z0-9]/g,""),kind="image";
+if(file.type.startsWith("video/")){kind="video";if(file.size>52428800)return toast(`"${file.name}" pesa más de 50 MB. Usá un enlace de YouTube o Vimeo.`,1);ratio=await vratio(file)}
+else if(/^image\/(jpeg|png|webp)$/.test(file.type)){const s=await shrink(file);blob=s.blob;ratio=s.ratio;ext="webp"}else return toast("Formato no admitido: "+file.name,1);
+const path=`projects/${p.id}/${crypto.randomUUID()}.${ext}`,u=await BK.upload(path,blob,{contentType:blob.type||file.type,cacheControl:"31536000"});if(u.error)throw u.error;
+const ins=await sb.from("project_media").insert({project_id:p.id,kind,path,ratio,position:nextPos(p)}).select().single();if(ins.error)throw ins.error;p.project_media.push(ins.data);
+if(kind=="image"&&!p.cover_path){const r=await sb.from("projects").update({cover_path:path,cover_ratio:ratio}).eq("id",p.id);if(r.error)throw r.error;p.cover_path=path}}catch(x){fail(x)}}
+/* CATEGORÍAS */
+function vCat(){main.innerHTML=`<div class="bar"><h2>Categorías</h2></div><form class="inl" id="cf"><input name="n" placeholder="Nueva categoría" required><button class="b k">AGREGAR</button></form>`+cats.map((c,i)=>`<div class="row"><input class="nm" id="n${c.id}" value="${esc(c.name)}" aria-label="Nombre"><div class="ac"><button class="b" data-a="cup" data-i="${i}" ${i?"":"disabled"}>↑</button><button class="b" data-a="cdn" data-i="${i}" ${i<cats.length-1?"":"disabled"}>↓</button><button class="b" data-a="csave" data-id="${c.id}">GUARDAR</button><button class="b" data-a="cdel" data-id="${c.id}">ELIMINAR</button></div></div>`).join("");
+$("#cf").onsubmit=async e=>{e.preventDefault();const n=new FormData(e.target).get("n").trim().toUpperCase();const r=await sb.from("categories").insert({name:n,position:cats.length});if(r.error)return fail(r.error);reload(vCat)}}
+/* PERFIL */
+function vProf(){const f=prof;main.innerHTML=`<div class="bar"><h2>Perfil</h2></div><form id="prf"><label>Presentación (Kevin Cura)<textarea name="bio" rows="4">${esc(f.bio)}</textarea></label><label>Trayectoria<textarea name="trajectory" rows="5">${esc(f.trajectory)}</textarea></label><label>Habilidades<textarea name="skills" rows="4">${esc(f.skills)}</textarea></label>
+<label>Correo electrónico<input name="email" type="email" value="${esc(f.email)}"></label><label>WhatsApp (solo números, con código de país y sin +)<input name="whatsapp" inputmode="numeric" value="${esc(f.whatsapp)}"></label><label>LinkedIn (enlace completo)<input name="linkedin" value="${esc(f.linkedin)}" placeholder="https://www.linkedin.com/in/…"></label>
+<label>Otros enlaces (uno por línea: Nombre | https://enlace)<textarea name="links" rows="3">${esc((f.links||[]).map(l=>l.label+" | "+l.url).join("\n"))}</textarea></label><button class="b k">GUARDAR PERFIL</button></form>
+<h3>Fotografía</h3>${f.photo_path?`<img class="pv" alt="" src="${esc(pub(f.photo_path))}">`:'<p class="m">Todavía no hay foto.</p>'}<label class="b" style="margin-top:14px">${f.photo_path?"REEMPLAZAR":"SUBIR"} FOTO<input type="file" id="ph" accept="image/jpeg,image/png,image/webp" hidden></label>
+<h3>Currículum (PDF)</h3>${f.cv_path?`<a href="${esc(pub(f.cv_path))}" target="_blank" rel="noopener">Ver CV actual</a><br>`:""}<label class="b" style="margin-top:14px">${f.cv_path?"REEMPLAZAR":"SUBIR"} CV<input type="file" id="cv" accept="application/pdf" hidden></label>`;
+$("#prf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),li=f.get("linkedin").trim();if(li&&!/^https?:\/\//.test(li))return toast("El enlace de LinkedIn debe empezar con https://",1);
+const links=f.get("links").split("\n").map(l=>l.split("|").map(s=>s.trim())).filter(a=>a[0]&&/^https?:\/\//.test(a[1]||"")).map(a=>({label:a[0],url:a[1]}));
+const r=await sb.from("profile").update({bio:f.get("bio"),trajectory:f.get("trajectory"),skills:f.get("skills"),email:f.get("email").trim(),whatsapp:f.get("whatsapp").replace(/\D/g,""),linkedin:li,links}).eq("id",1);r.error?fail(r.error):(toast("Perfil guardado ✓"),reload(vProf))};
+$("#ph").onchange=e=>pfile(e.target.files[0],"photo_path",true);$("#cv").onchange=e=>pfile(e.target.files[0],"cv_path",false)}
+async function pfile(file,col,img){if(!file)return;try{toast("Subiendo…");let blob=file,ext="pdf";if(img){blob=(await shrink(file)).blob;ext="webp"}else if(file.size>20971520)return toast("El PDF pesa más de 20 MB.",1);
+const path=`profile/${col}-${crypto.randomUUID()}.${ext}`,u=await BK.upload(path,blob,{contentType:blob.type||file.type,cacheControl:"31536000"});if(u.error)throw u.error;
+const r=await sb.from("profile").update({[col]:path}).eq("id",1);if(r.error)throw r.error;if(prof[col])await BK.remove([prof[col]]);toast("Listo ✓");reload(vProf)}catch(x){fail(x)}}
+/* ACCIONES */
+async function act(e){const b=e.target.closest("[data-a]");if(!b)return;const a=b.dataset.a,id=b.dataset.id,i=+b.dataset.i;try{
+if(a=="newp"){const r=await sb.from("projects").insert({title:"Nuevo proyecto",position:projs.length}).select().single();if(r.error)throw r.error;await loadAll();edit(r.data.id)}
+else if(a=="edit")edit(id);else if(a=="back")reload(vProj);
+else if(a=="pup")reorder(projs,i,-1,"projects",vProj);else if(a=="pdn")reorder(projs,i,1,"projects",vProj);
+else if(a=="ptog"){const p=projs.find(x=>x.id==id);if(!p.published&&!p.cover_path)return toast("Antes de publicar, subí una imagen y elegila como portada.",1);const r=await sb.from("projects").update({published:!p.published}).eq("id",id);if(r.error)throw r.error;reload(vProj)}
+else if(a=="delp"){const p=projs.find(x=>x.id==id);if(!confirm(`¿Eliminar "${p.title}" para siempre? No se puede deshacer.`))return;const ps=p.project_media.map(m=>m.path).filter(Boolean);if(ps.length)await BK.remove(ps);const r=await sb.from("projects").delete().eq("id",id);if(r.error)throw r.error;toast("Proyecto eliminado");reload(vProj)}
+else if(a=="cover"){const p=projs.find(x=>x.project_media.some(m=>m.id==b.dataset.m)),m=p.project_media.find(m=>m.id==b.dataset.m);const r=await sb.from("projects").update({cover_path:m.path,cover_ratio:m.ratio}).eq("id",p.id);if(r.error)throw r.error;await loadAll();edit(p.id)}
+else if(a=="delm"){const p=projs.find(x=>x.project_media.some(m=>m.id==b.dataset.m)),m=p.project_media.find(m=>m.id==b.dataset.m);if(m.path)await BK.remove([m.path]);const r=await sb.from("project_media").delete().eq("id",m.id);if(r.error)throw r.error;
+if(p.cover_path&&p.cover_path==m.path){const n=p.project_media.find(x=>x.id!=m.id&&x.kind=="image");await sb.from("projects").update({cover_path:n?n.path:null,cover_ratio:n?n.ratio:null,...(n?{}:{published:false})}).eq("id",p.id)}await loadAll();edit(p.id)}
+else if(a=="cup")reorder(cats,i,-1,"categories",vCat);else if(a=="cdn")reorder(cats,i,1,"categories",vCat);
+else if(a=="csave"){const r=await sb.from("categories").update({name:$("#n"+id).value.trim().toUpperCase()}).eq("id",id);if(r.error)throw r.error;toast("Guardado ✓");reload(vCat)}
+else if(a=="cdel"){if(!confirm("¿Eliminar esta categoría? Se quita de todos los proyectos."))return;const r=await sb.from("categories").delete().eq("id",id);if(r.error)throw r.error;reload(vCat)}
+}catch(x){fail(x)}}
+boot();
+</script></body></html>
